@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Minecraft City Map</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a1a;
+            color: #fff;
+            overflow: hidden;
+        }
+
+        .map-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            cursor: grab;
+        }
+
+        .map-container:active {
+            cursor: grabbing;
+        }
+
+        .map-canvas {
+            position: relative;
+            transform-origin: 0 0;
+            transition: transform 0.1s ease-out;
+        }
+
+        .city-image {
+            display: block;
+            user-select: none;
+            pointer-events: none;
+        }
+
+        .building {
+            position: absolute;
+            border: 2px solid #4CAF50;
+            background: rgba(76, 175, 80, 0.2);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .building:hover {
+            border-color: #81C784;
+            background: rgba(129, 199, 132, 0.3);
+            transform: scale(1.02);
+        }
+
+        .quarter {
+            position: absolute;
+            border: 3px solid #FF9800;
+            background: rgba(255, 152, 0, 0.1);
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .quarter-label {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(255, 152, 0, 0.9);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .street-name {
+            position: absolute;
+            background: rgba(33, 150, 243, 0.9);
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+            transform: translateX(-50%);
+        }
+
+        .controls {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+        }
+
+        .control-group {
+            margin-bottom: 10px;
+        }
+
+        .control-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .zoom-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .btn {
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s ease;
+        }
+
+        .btn:hover {
+            background: #1976D2;
+        }
+
+        .toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .toggle input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+        }
+
+        .toggle label {
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .infobox {
+            position: fixed;
+            background: linear-gradient(135deg, #2c3e50, #34495e);
+            border: 2px solid #3498db;
+            border-radius: 10px;
+            padding: 20px;
+            min-width: 300px;
+            max-width: 400px;
+            z-index: 2000;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(10px);
+        }
+
+        .infobox-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #3498db;
+        }
+
+        .infobox-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #3498db;
+        }
+
+        .close-btn {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s ease;
+        }
+
+        .close-btn:hover {
+            background: #c0392b;
+        }
+
+        .info-item {
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+        }
+
+        .info-label {
+            font-weight: bold;
+            color: #3498db;
+            min-width: 120px;
+        }
+
+        .info-value {
+            color: #ecf0f1;
+        }
+
+        .zoom-level {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-size: 14px;
+            z-index: 1000;
+        }
+
+        .add-building-btn {
+            background: #4CAF50;
+            margin-bottom: 15px;
+        }
+
+        .add-building-btn:hover {
+            background: #45a049;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="map-container" id="mapContainer">
+        <div class="map-canvas" id="mapCanvas">
+            <img src="Screenshot_24.jpg" alt="Kronnstadt" class="city-image" id="cityImage">
+            
+            <!-- Example buildings - replace with your actual buildings -->
+            <div class="building" data-building='{"name": "City Hall", "architect": "Steve Builder", "interior": "Alex Designer", "owner": "City Council", "built": "Jan-2024", "address": "1 Main Square"}' style="left: 300px; top: 200px; width: 80px; height: 60px;"></div>
+            
+            <div class="building" data-building='{"name": "Grand Library", "architect": "BookWorm", "interior": "ReadMaster", "owner": "Public", "built": "Mar-2024", "address": "15 Knowledge Ave"}' style="left: 450px; top: 150px; width: 100px; height: 80px;"></div>
+            
+            <div class="building" data-building='{"name": "Shopping Mall", "architect": "CommerceCraft", "interior": "ShopDesign Pro", "owner": "Mall Corp", "built": "Feb-2024", "address": "42 Commerce St"}' style="left: 200px; top: 350px; width: 120px; height: 90px;"></div>
+
+            <!-- Example quarters -->
+            <div class="quarter" style="left: 150px; top: 100px; width: 250px; height: 200px;">
+                <div class="quarter-label">Downtown</div>
+            </div>
+            
+            <div class="quarter" style="left: 500px; top: 250px; width: 200px; height: 180px;">
+                <div class="quarter-label">Residential</div>
+            </div>
+
+            <!-- Example street names -->
+            <div class="street-name" style="left: 350px; top: 120px;">Main Street</div>
+            <div class="street-name" style="left: 250px; top: 280px;">Commerce Boulevard</div>
+            <div class="street-name" style="left: 550px; top: 200px;">Residential Way</div>
+        </div>
+    </div>
+
+    <div class="controls">
+        <div class="zoom-controls">
+            <button class="btn" onclick="zoomIn()">Zoom In</button>
+            <button class="btn" onclick="zoomOut()">Zoom Out</button>
+            <button class="btn" onclick="resetZoom()">Reset</button>
+        </div>
+        
+        <button class="btn add-building-btn" onclick="toggleAddBuildingMode()">Add Building</button>
+        
+        <div class="control-group">
+            <div class="toggle">
+                <input type="checkbox" id="streetToggle" checked onchange="toggleStreets()">
+                <label for="streetToggle">Show Street Names</label>
+            </div>
+            
+            <div class="toggle">
+                <input type="checkbox" id="quarterToggle" checked onchange="toggleQuarters()">
+                <label for="quarterToggle">Show Quarters</label>
+            </div>
+        </div>
+    </div>
+
+    <div class="zoom-level" id="zoomLevel">Zoom: 100%</div>
+
+    <script>
+        let currentZoom = 1;
+        let isDragging = false;
+        let dragStart = { x: 0, y: 0 };
+        let currentTranslate = { x: 0, y: 0 };
+        let currentInfobox = null;
+        let addBuildingMode = false;
+
+        const mapContainer = document.getElementById('mapContainer');
+        const mapCanvas = document.getElementById('mapCanvas');
+        const cityImage = document.getElementById('cityImage');
+        const zoomLevel = document.getElementById('zoomLevel');
+
+        // Initialize map
+        function initMap() {
+            // Set default image size if no image is loaded
+            if (!cityImage.complete) {
+                cityImage.onload = function() {
+                    updateTransform();
+                };
+                // Fallback size
+                cityImage.style.width = '1200px';
+                cityImage.style.height = '800px';
+            }
+        }
+
+        // Zoom functions
+        function zoomIn() {
+            currentZoom = Math.min(currentZoom * 1.2, 5);
+            updateTransform();
+            updateZoomLevel();
+        }
+
+        function zoomOut() {
+            currentZoom = Math.max(currentZoom / 1.2, 0.2);
+            updateTransform();
+            updateZoomLevel();
+        }
+
+        function resetZoom() {
+            currentZoom = 1;
+            currentTranslate = { x: 0, y: 0 };
+            updateTransform();
+            updateZoomLevel();
+        }
+
+        function updateTransform() {
+            mapCanvas.style.transform = `translate(${currentTranslate.x}px, ${currentTranslate.y}px) scale(${currentZoom})`;
+        }
+
+        function updateZoomLevel() {
+            zoomLevel.textContent = `Zoom: ${Math.round(currentZoom * 100)}%`;
+        }
+
+        // Mouse wheel zoom
+        mapContainer.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const rect = mapContainer.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            const oldZoom = currentZoom;
+            if (e.deltaY < 0) {
+                currentZoom = Math.min(currentZoom * 1.1, 5);
+            } else {
+                currentZoom = Math.max(currentZoom / 1.1, 0.2);
+            }
+            
+            // Zoom towards mouse position
+            const zoomRatio = currentZoom / oldZoom;
+            currentTranslate.x = mouseX - (mouseX - currentTranslate.x) * zoomRatio;
+            currentTranslate.y = mouseY - (mouseY - currentTranslate.y) * zoomRatio;
+            
+            updateTransform();
+            updateZoomLevel();
+        });
+
+        // Dragging functionality
+        mapContainer.addEventListener('mousedown', (e) => {
+            if (addBuildingMode) return;
+            isDragging = true;
+            dragStart.x = e.clientX - currentTranslate.x;
+            dragStart.y = e.clientY - currentTranslate.y;
+            mapContainer.style.cursor = 'grabbing';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            currentTranslate.x = e.clientX - dragStart.x;
+            currentTranslate.y = e.clientY - dragStart.y;
+            updateTransform();
+        });
+
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+            mapContainer.style.cursor = 'grab';
+        });
+
+        // Building click handler
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('building')) {
+                showInfobox(e.target);
+            } else if (addBuildingMode && e.target === cityImage) {
+                createBuilding(e);
+            } else {
+                closeInfobox();
+            }
+        });
+
+        // Toggle functions
+        function toggleStreets() {
+            const streets = document.querySelectorAll('.street-name');
+            const isChecked = document.getElementById('streetToggle').checked;
+            streets.forEach(street => {
+                street.style.opacity = isChecked ? '1' : '0';
+            });
+        }
+
+        function toggleQuarters() {
+            const quarters = document.querySelectorAll('.quarter');
+            const isChecked = document.getElementById('quarterToggle').checked;
+            quarters.forEach(quarter => {
+                quarter.style.opacity = isChecked ? '1' : '0';
+            });
+        }
+
+        // Building mode
+        function toggleAddBuildingMode() {
+            addBuildingMode = !addBuildingMode;
+            const btn = document.querySelector('.add-building-btn');
+            if (addBuildingMode) {
+                btn.textContent = 'Exit Add Mode';
+                btn.style.background = '#f44336';
+                mapContainer.style.cursor = 'crosshair';
+            } else {
+                btn.textContent = 'Add Building';
+                btn.style.background = '#4CAF50';
+                mapContainer.style.cursor = 'grab';
+            }
+        }
+
+        function createBuilding(e) {
+            const rect = mapCanvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left - currentTranslate.x) / currentZoom;
+            const y = (e.clientY - rect.top - currentTranslate.y) / currentZoom;
+            
+            const name = prompt('Building name:') || 'New Building';
+            const architect = prompt('Architect:') || 'Unknown';
+            const interior = prompt('Interior designer:') || 'Unknown';
+            const owner = prompt('Owner:') || 'Unknown';
+            const built = prompt('Built (MM-YYYY):') || 'Unknown';
+            const address = prompt('Address:') || 'Unknown';
+            
+            const building = document.createElement('div');
+            building.className = 'building';
+            building.style.left = x + 'px';
+            building.style.top = y + 'px';
+            building.style.width = '80px';
+            building.style.height = '60px';
+            building.dataset.building = JSON.stringify({
+                name, architect, interior, owner, built, address
+            });
+            
+            mapCanvas.appendChild(building);
+        }
+
+        // Infobox functions
+        function showInfobox(building) {
+            closeInfobox();
+            
+            const data = JSON.parse(building.dataset.building);
+            const rect = building.getBoundingClientRect();
+            
+            const infobox = document.createElement('div');
+            infobox.className = 'infobox';
+            infobox.innerHTML = `
+                <div class="infobox-header">
+                    <div class="infobox-title">${data.name}</div>
+                    <button class="close-btn" onclick="closeInfobox()">×</button>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Architect:</span>
+                    <span class="info-value">${data.architect}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Interior Designer:</span>
+                    <span class="info-value">${data.interior}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Owner:</span>
+                    <span class="info-value">${data.owner}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Built:</span>
+                    <span class="info-value">${data.built}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Address:</span>
+                    <span class="info-value">${data.address}</span>
+                </div>
+            `;
+            
+            // Position infobox
+            infobox.style.left = Math.min(rect.right + 10, window.innerWidth - 320) + 'px';
+            infobox.style.top = Math.max(rect.top, 10) + 'px';
+            
+            document.body.appendChild(infobox);
+            currentInfobox = infobox;
+        }
+
+        function closeInfobox() {
+            if (currentInfobox) {
+                currentInfobox.remove();
+                currentInfobox = null;
+            }
+        }
+
+        // Prevent context menu
+        document.addEventListener('contextmenu', e => e.preventDefault());
+
+        // Initialize
+        initMap();
+        updateZoomLevel();
+    </script>
+</body>
+</html>
